@@ -1,0 +1,11 @@
+{
+  "name": "onlytest-site-checks",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Development checks only; the website is dependency-free static HTML, CSS and JavaScript.",
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "axe-core": "4.11.1",
+    "typescript": "5.9.3"
+  }
+}

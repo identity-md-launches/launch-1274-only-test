@@ -1,0 +1,185 @@
+{
+  "date": "2026-10-11T00:36:46.087Z",
+  "checks": [
+    {
+      "name": "Eight sections and eight SVG memes; honest prelaunch contract and unavailable data"
+    },
+    {
+      "name": "Home layout at 320px",
+      "buyBottom": 432.171875
+    },
+    {
+      "name": "Home layout at 360px",
+      "buyBottom": 450.234375
+    },
+    {
+      "name": "Home layout at 375px",
+      "buyBottom": 456.984375
+    },
+    {
+      "name": "Home layout at 390px",
+      "buyBottom": 463.734375
+    },
+    {
+      "name": "Home layout at 600px",
+      "buyBottom": 528.421875
+    },
+    {
+      "name": "Home layout at 768px",
+      "buyBottom": 533.515625
+    },
+    {
+      "name": "Home layout at 860px",
+      "buyBottom": 543.890625
+    },
+    {
+      "name": "Home layout at 1024px",
+      "buyBottom": 584.609375
+    },
+    {
+      "name": "Home layout at 1440px",
+      "buyBottom": 669.03125
+    },
+    {
+      "name": "Home layout at 1920px",
+      "buyBottom": 687.796875
+    },
+    {
+      "name": "All in-page links resolve, all three local fonts load"
+    },
+    {
+      "name": "Keyboard skip link, mobile menu close/focus return, guide selection and all three steps"
+    },
+    {
+      "name": "Live feed, exact buy/chart URLs, full contract copy, site-link copy and three distinct X intents"
+    },
+    {
+      "name": "30-second refresh verified with a virtual browser clock"
+    },
+    {
+      "name": "Buy navigation and confetti, animated stat updates, and live-logo priority"
+    },
+    {
+      "name": "Malformed feed, missing fields, invalid address, unsafe URLs, invalid numbers and recovery"
+    },
+    {
+      "name": "All eight wall downloads and custom meme PNG export; long captions and markup remain plain text"
+    },
+    {
+      "name": "Pointer drag, keyboard sticker movement, click meter, 100% cap and reset"
+    },
+    {
+      "name": "Reduced-motion setting disables all running animations"
+    },
+    {
+      "name": "Visible pause control stops and resumes continuous animation"
+    },
+    {
+      "name": "Home axe WCAG A/AA scan at 375px"
+    },
+    {
+      "name": "Home axe WCAG A/AA scan at 1440px"
+    },
+    {
+      "name": "Five rendered text/surface contrast pairs exceed 4.5:1",
+      "contrast": [
+        {
+          "text": "body",
+          "surface": "body",
+          "foreground": "rgb(242, 241, 237)",
+          "background": "rgb(11, 11, 11)",
+          "ratio": 17.414863535704715
+        },
+        {
+          "text": ".hero-description",
+          "surface": "body",
+          "foreground": "rgb(179, 179, 175)",
+          "background": "rgb(11, 11, 11)",
+          "ratio": 9.357505525422356
+        },
+        {
+          "text": ".primary",
+          "surface": ".primary",
+          "foreground": "rgb(11, 11, 11)",
+          "background": "rgb(242, 241, 237)",
+          "ratio": 17.414863535704715
+        },
+        {
+          "text": ".stat .muted",
+          "surface": ".stats-section",
+          "foreground": "rgb(179, 179, 175)",
+          "background": "rgb(20, 20, 20)",
+          "ratio": 8.758433381436792
+        },
+        {
+          "text": ".generator-controls input",
+          "surface": ".generator-controls input",
+          "foreground": "rgb(242, 241, 237)",
+          "background": "rgb(11, 11, 11)",
+          "ratio": 17.414863535704715
+        }
+      ]
+    },
+    {
+      "name": "200% text enlargement reflow at 390px"
+    },
+    {
+      "name": "404 page and axe scan at 375px"
+    },
+    {
+      "name": "404 page and axe scan at 1440px"
+    },
+    {
+      "name": "404 home navigation works from the static subpath"
+    },
+    {
+      "name": "No JavaScript exceptions or failed resource requests during successful-state checks"
+    }
+  ],
+  "audits": [
+    {
+      "page": "index.html",
+      "width": 375,
+      "violations": [],
+      "passes": 31,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "page": "index.html",
+      "width": 1440,
+      "violations": [],
+      "passes": 31,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "page": "404.html",
+      "width": 375,
+      "violations": [],
+      "passes": 13,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "page": "404.html",
+      "width": 1440,
+      "violations": [],
+      "passes": 13,
+      "incomplete": [
+        "color-contrast"
+      ]
+    }
+  ],
+  "errors": [],
+  "failedResources": [],
+  "limitations": [
+    "Headless Chromium only; no physical device or screen-reader session.",
+    "200% text enlargement is not native browser zoom.",
+    "Local feed fixtures verify behavior; they do not establish deployed market values.",
+    "Share intent destinations are verified without posting to X."
+  ]
+}

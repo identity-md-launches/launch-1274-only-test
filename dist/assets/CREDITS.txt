@@ -1,0 +1,16 @@
+Only test — asset credits
+
+Logo: supplied by the launch brief, retrieved 2026-10-11 without modification.
+https://fxumiqjngmabtgvruvka.supabase.co/storage/v1/object/public/forum-attachments/posts/mv2zn9kb-aw7l6q.webp
+The original is a 96x96 WebP. The live launch feed can replace it at runtime.
+
+The eight meme compositions, hero orbit, receipt, terminal and sticker layouts
+are original CSS/SVG work for Only test. No stock imagery is used.
+
+Local Google Fonts Latin subsets (WOFF2):
+Archivo Black — Omnibus-Type, SIL Open Font License 1.1.
+DM Sans — Colophon Foundry and contributors, SIL Open Font License 1.1.
+Space Mono — Colophon Foundry, SIL Open Font License 1.1.
+The complete notices and licenses are in fonts/*-OFL.txt.
+
+All fonts are served locally. The page does not contact Google Fonts at runtime.
