@@ -156,40 +156,61 @@ contract TESTTokenTest is Test {
     }
 
     function test_NoAdministrativeEntryPointsForDeployerOrStranger() public {
-        string[24] memory signatures = [
-            "owner()",
-            "admin()",
-            "mint(address,uint256)",
-            "mint(uint256)",
-            "mint()",
-            "burn(uint256)",
-            "burnFrom(address,uint256)",
-            "pause()",
-            "unpause()",
-            "blacklist(address)",
-            "freeze(address)",
-            "seize(address)",
-            "setOwner(address)",
-            "transferOwnership(address)",
-            "renounceOwnership()",
-            "upgradeTo(address)",
-            "initialize(address)",
-            "setMinter(address)",
-            "setFee(uint256)",
-            "setTax(uint256)",
-            "setPool(address)",
-            "setTransfersEnabled(bool)",
-            "grantRole(bytes32,address)",
-            "setBlacklist(address,bool)"
+        // Valid ABI arguments matter: a bad bool or address encoding can revert before
+        // an accidentally exposed privileged function is reached.
+        bytes[34] memory calls = [
+            abi.encodeWithSignature("owner()"),
+            abi.encodeWithSignature("admin()"),
+            abi.encodeWithSignature("mint(address,uint256)", bob, 100),
+            abi.encodeWithSignature("mint(uint256)", 100),
+            abi.encodeWithSignature("mint()"),
+            abi.encodeWithSignature("burn(uint256)", 100),
+            abi.encodeWithSignature("burnFrom(address,uint256)", alice, 100),
+            abi.encodeWithSignature("pause()"),
+            abi.encodeWithSignature("unpause()"),
+            abi.encodeWithSignature("blacklist(address)", alice),
+            abi.encodeWithSignature("freeze(address)", alice),
+            abi.encodeWithSignature("seize(address)", alice),
+            abi.encodeWithSignature("setOwner(address)", bob),
+            abi.encodeWithSignature("transferOwnership(address)", bob),
+            abi.encodeWithSignature("renounceOwnership()"),
+            abi.encodeWithSignature("upgradeTo(address)", bob),
+            abi.encodeWithSignature("initialize(address)", bob),
+            abi.encodeWithSignature("setMinter(address)", bob),
+            abi.encodeWithSignature("setFee(uint256)", 100),
+            abi.encodeWithSignature("setTax(uint256)", 100),
+            abi.encodeWithSignature("setPool(address)", bob),
+            abi.encodeWithSignature("setTransfersEnabled(bool)", false),
+            abi.encodeWithSignature("grantRole(bytes32,address)", bytes32(0), bob),
+            abi.encodeWithSignature("setBlacklist(address,bool)", alice, true),
+            abi.encodeWithSignature("setBlocked(address,bool)", alice, true),
+            abi.encodeWithSignature("freezeAccount(address)", alice),
+            abi.encodeWithSignature("lock(address)", alice),
+            abi.encodeWithSignature("disableTransfers()"),
+            abi.encodeWithSignature("setName(string)", "changed"),
+            abi.encodeWithSignature("setSymbol(string)", "OTHER"),
+            abi.encodeWithSignature("setDecimals(uint8)", uint8(6)),
+            abi.encodeWithSignature("setTotalSupply(uint256)", SUPPLY + 1),
+            abi.encodeWithSignature("initialize()"),
+            abi.encodeWithSignature("upgradeToAndCall(address,bytes)", bob, bytes(""))
         ];
         token.transfer(alice, 100);
-        for (uint256 i; i < signatures.length; ++i) {
-            bytes memory data = abi.encodeWithSignature(signatures[i], alice, uint256(100));
-            (bool ok,) = address(token).call(data);
-            assertFalse(ok, signatures[i]);
+        bytes32 codeHash = address(token).codehash;
+        for (uint256 i; i < calls.length; ++i) {
+            (bool ok,) = address(token).call(calls[i]);
+            assertFalse(ok, "deployer reached a privileged entry point");
             vm.prank(bob);
-            (ok,) = address(token).call(data);
-            assertFalse(ok, signatures[i]);
+            (ok,) = address(token).call(calls[i]);
+            assertFalse(ok, "stranger reached a privileged entry point");
+            assertEq(token.balanceOf(alice), 100);
+            assertEq(token.balanceOf(bob), 0);
+            assertEq(token.totalSupply(), SUPPLY);
+            assertEq(token.cumulativeTransferred(address(this)), 100);
+            assertEq(token.cumulativeTransferred(alice), 0);
+            assertEq(token.name(), "Only test");
+            assertEq(token.symbol(), "TEST");
+            assertEq(token.decimals(), 18);
+            assertEq(address(token).codehash, codeHash);
         }
         vm.expectRevert(abi.encodeWithSelector(TESTToken.ERC20InsufficientAllowance.selector, address(this), 0, 1));
         token.transferFrom(alice, address(this), 1);
@@ -213,7 +234,6 @@ contract TESTTokenTest is Test {
         }
     }
 
-    /// forge-config: default.fuzz.runs = 1000
     function testFuzz_TransferRoundTripConservesSupplyAndGrossTotals(uint256 rawAmount) public {
         uint256 amount = bound(rawAmount, 0, SUPPLY);
         _expectTransfer(address(this), alice, amount, amount);
@@ -228,7 +248,6 @@ contract TESTTokenTest is Test {
         assertEq(token.totalSupply(), SUPPLY);
     }
 
-    /// forge-config: default.fuzz.runs = 1000
     function testFuzz_DelegatedTransfersAreExact(uint256 rawBalance, uint256 rawAmount) public {
         uint256 balance = bound(rawBalance, 0, SUPPLY);
         uint256 amount = bound(rawAmount, 0, balance);

@@ -9,14 +9,26 @@ import {PoolManager} from "v4-core/src/PoolManager.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
 
 contract LaunchIntegrationTest is Test {
     using StateLibrary for IPoolManager;
+    using TransientStateLibrary for IPoolManager;
+
+    struct SwapEventData {
+        int128 amount0;
+        int128 amount1;
+        uint160 sqrtPriceX96;
+        uint128 liquidity;
+        int24 tick;
+        uint24 fee;
+    }
 
     uint256 internal constant SUPPLY = 1e27;
     uint256 internal constant SWARM = SUPPLY / 10;
@@ -51,12 +63,65 @@ contract LaunchIntegrationTest is Test {
         _launchAndTrade(false, 0.01 ether);
     }
 
-    /// forge-config: default.fuzz.runs = 1000
     function testFuzz_PoolSettlementNeverTaxesTEST(bool tokenIsZero, uint128 rawBuy) public {
         _launchAndTrade(tokenIsZero, bound(rawBuy, 1e12, 1 ether));
     }
 
+    function test_UnderfundedSwapsRollBackWhenTESTIsCurrency0() public {
+        _checkUnderfundedSwaps(true);
+    }
+
+    function test_UnderfundedSwapsRollBackWhenTESTIsCurrency1() public {
+        _checkUnderfundedSwaps(false);
+    }
+
+    function test_ZeroSwapCannotChangePoolOrTokenState() public {
+        _launch(true);
+        bytes32 beforeState = _accountingHash();
+        vm.expectRevert(IPoolManager.SwapAmountCannotBeZero.selector);
+        trader.swap(key, false, 0);
+        assertEq(_accountingHash(), beforeState);
+        _assertSettled();
+    }
+
+    function _checkUnderfundedSwaps(bool tokenIsZero) internal {
+        _launch(tokenIsZero);
+        bytes32 beforeState = _accountingHash();
+        // The offline IMD probe reverts with arithmetic underflow when it cannot pay.
+        // With TEST as currency0, PoolManager has already sent TEST before that failure.
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
+        trader.swap(key, !tokenIsZero, 0.01 ether);
+        assertEq(_accountingHash(), beforeState, "unfunded buy must roll back every token and pool change");
+        _assertSettled();
+
+        PairTokenProbe(IMD).mint(address(trader), 0.01 ether);
+        trader.swap(key, !tokenIsZero, 0.01 ether);
+        uint256 bought = token.balanceOf(address(trader));
+        assertGt(bought, 0);
+        beforeState = _accountingHash();
+        vm.expectRevert(
+            abi.encodeWithSelector(TESTToken.ERC20InsufficientBalance.selector, address(trader), bought, bought + 1)
+        );
+        trader.swap(key, tokenIsZero, bought + 1);
+        assertEq(_accountingHash(), beforeState, "failed sell must also roll back any prior IMD payout");
+        _assertSettled();
+
+        // A failed unlock must not freeze later legitimate trading.
+        trader.swap(key, tokenIsZero, bought);
+        assertEq(token.balanceOf(address(trader)), 0);
+        assertEq(token.cumulativeTransferred(address(trader)), bought);
+        assertEq(token.totalSupply(), SUPPLY);
+        _assertSettled();
+    }
+
     function _launchAndTrade(bool tokenIsZero, uint256 buyAmount) internal {
+        _launch(tokenIsZero);
+        _tradeRoundTrip(tokenIsZero, buyAmount);
+        assertEq(token.totalSupply(), SUPPLY);
+        assertEq(token.balanceOf(address(token)), 0);
+    }
+
+    function _launch(bool tokenIsZero) internal {
         _deployInOrder(tokenIsZero);
         assertEq(token.balanceOf(address(factory)), SUPPLY, "constructor must not distribute");
         assertEq(token.balanceOf(address(token)), 0);
@@ -79,9 +144,7 @@ contract LaunchIntegrationTest is Test {
         assertEq(currentPrice, openingPrice);
         assertEq(fee, 12500);
         _seed(tokenIsZero, tick, openingPrice);
-        _tradeRoundTrip(tokenIsZero, buyAmount);
-        assertEq(token.totalSupply(), SUPPLY);
-        assertEq(token.balanceOf(address(token)), 0);
+        _assertSettled();
     }
 
     function _deployInOrder(bool tokenIsZero) internal {
@@ -113,12 +176,18 @@ contract LaunchIntegrationTest is Test {
         assertEq(token.balanceOf(address(distributor)), SWARM);
         assertEq(token.balanceOf(address(factory)), POOL_BUDGET);
         assertEq(token.cumulativeTransferred(address(factory)), SWARM);
+        vm.recordLogs();
         distributor.claim(first, firstAmount, leafB);
+        _assertRunningLog(vm.getRecordedLogs(), address(distributor), firstAmount);
+        vm.recordLogs();
         distributor.claim(second, secondAmount, leafA);
+        _assertRunningLog(vm.getRecordedLogs(), address(distributor), SWARM);
         assertEq(token.balanceOf(first), firstAmount);
         assertEq(token.balanceOf(second), secondAmount);
         assertEq(token.balanceOf(address(distributor)), 0);
         assertEq(token.cumulativeTransferred(address(distributor)), SWARM);
+        assertEq(token.cumulativeTransferred(first), 0);
+        assertEq(token.cumulativeTransferred(second), 0);
     }
 
     function _seed(bool tokenIsZero, int24 tick, uint160 openingPrice) internal {
@@ -173,24 +242,105 @@ contract LaunchIntegrationTest is Test {
         assertEq(uint256(int256(tokenIsZero ? boughtDelta.amount0() : boughtDelta.amount1())), bought);
         assertEq(managerBefore - token.balanceOf(MANAGER), bought, "buy output must arrive whole");
         assertEq(token.cumulativeTransferred(MANAGER), bought);
-        _assertRunningLog(vm.getRecordedLogs(), MANAGER, bought);
+        Vm.Log[] memory buyLogs = vm.getRecordedLogs();
+        _assertRunningLog(buyLogs, MANAGER, bought);
+        _assertSwapLog(buyLogs, boughtDelta);
+        assertEq(uint256(-int256(tokenIsZero ? boughtDelta.amount1() : boughtDelta.amount0())), buyAmount);
+        assertEq(PairTokenProbe(IMD).balanceOf(MANAGER), buyAmount);
+        _assertPoolFees(tokenIsZero, buyAmount, 0);
+        _assertSettled();
         vm.recordLogs();
         BalanceDelta soldDelta = trader.swap(key, tokenIsZero, bought);
         assertEq(token.balanceOf(address(trader)), 0, "all bought tokens must be sellable");
         assertEq(uint256(-int256(tokenIsZero ? soldDelta.amount0() : soldDelta.amount1())), bought);
         assertEq(token.balanceOf(MANAGER), managerBefore, "sell settlement must arrive whole");
         assertEq(token.cumulativeTransferred(address(trader)), bought);
-        _assertRunningLog(vm.getRecordedLogs(), address(trader), bought);
+        Vm.Log[] memory sellLogs = vm.getRecordedLogs();
+        _assertRunningLog(sellLogs, address(trader), bought);
+        _assertSwapLog(sellLogs, soldDelta);
+        uint256 returnedIMD = PairTokenProbe(IMD).balanceOf(address(trader));
+        assertEq(uint256(int256(tokenIsZero ? soldDelta.amount1() : soldDelta.amount0())), returnedIMD);
+        assertEq(PairTokenProbe(IMD).balanceOf(MANAGER) + returnedIMD, buyAmount);
+        _assertPoolFees(tokenIsZero, buyAmount, bought);
+        _assertSettled();
         // The pool charges its specified LP fee. TEST adds no transfer/swap tax.
         assertGt(PairTokenProbe(IMD).balanceOf(address(trader)), 0);
         assertLt(PairTokenProbe(IMD).balanceOf(address(trader)), buyAmount);
+    }
+
+    function _assertSwapLog(Vm.Log[] memory logs, BalanceDelta delta) internal view {
+        uint256 matched;
+        for (uint256 i; i < logs.length; ++i) {
+            if (
+                logs[i].emitter == MANAGER && logs[i].topics.length > 0
+                    && logs[i].topics[0]
+                        == keccak256("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)")
+            ) {
+                assertEq(logs[i].topics.length, 3);
+                assertEq(logs[i].topics[1], PoolId.unwrap(key.toId()));
+                assertEq(logs[i].topics[2], bytes32(uint256(uint160(address(trader)))));
+                SwapEventData memory emitted = abi.decode(logs[i].data, (SwapEventData));
+                assertEq(emitted.amount0, delta.amount0());
+                assertEq(emitted.amount1, delta.amount1());
+                assertEq(emitted.fee, 12500, "v4 fee units are millionths: 12500 is 1.25 percent");
+                (uint160 price, int24 tick,,) = manager.getSlot0(key.toId());
+                assertEq(emitted.sqrtPriceX96, price);
+                assertEq(emitted.tick, tick);
+                assertEq(emitted.liquidity, manager.getLiquidity(key.toId()));
+                ++matched;
+            }
+        }
+        assertEq(matched, 1, "must perform an actual PoolManager swap");
+    }
+
+    function _assertPoolFees(bool tokenIsZero, uint256 pairInput, uint256 testInput) internal view {
+        (uint256 feeGrowth0, uint256 feeGrowth1) = manager.getFeeGrowthGlobals(key.toId());
+        uint128 liquidity = manager.getLiquidity(key.toId());
+        assertGt(liquidity, 0);
+        uint256 pairFees = FullMath.mulDiv(tokenIsZero ? feeGrowth1 : feeGrowth0, liquidity, 1 << 128);
+        uint256 testFees = FullMath.mulDiv(tokenIsZero ? feeGrowth0 : feeGrowth1, liquidity, 1 << 128);
+        // The bounded round trip stays inside the sole funded range. Input includes
+        // ceil(input * 12500 / 1e6) LP fees; conversion from Q128 fee growth loses <= 1 unit.
+        uint256 expectedPairFees = pairInput - pairInput * 987_500 / 1_000_000;
+        uint256 expectedTestFees = testInput - testInput * 987_500 / 1_000_000;
+        assertApproxEqAbs(pairFees, expectedPairFees, 1, "only the specified IMD input LP fee accrues");
+        assertApproxEqAbs(testFees, expectedTestFees, 1, "only the specified TEST input LP fee accrues");
+        if (testInput == 0) assertEq(testFees, 0, "buy output must have no TEST fee");
+    }
+
+    function _assertSettled() internal view {
+        assertFalse(manager.isUnlocked());
+        assertEq(manager.getNonzeroDeltaCount(), 0);
+        assertEq(manager.currencyDelta(address(trader), key.currency0), 0);
+        assertEq(manager.currencyDelta(address(trader), key.currency1), 0);
+        assertEq(manager.currencyDelta(address(factory), key.currency0), 0);
+        assertEq(manager.currencyDelta(address(factory), key.currency1), 0);
+    }
+
+    function _accountingHash() internal view returns (bytes32) {
+        (uint160 price, int24 tick, uint24 protocolFee, uint24 lpFee) = manager.getSlot0(key.toId());
+        (uint256 fee0, uint256 fee1) = manager.getFeeGrowthGlobals(key.toId());
+        bytes32 poolState =
+            keccak256(abi.encode(price, tick, protocolFee, lpFee, fee0, fee1, manager.getLiquidity(key.toId())));
+        return keccak256(
+            abi.encode(
+                poolState,
+                token.totalSupply(),
+                token.balanceOf(MANAGER),
+                token.balanceOf(address(trader)),
+                token.cumulativeTransferred(MANAGER),
+                token.cumulativeTransferred(address(trader)),
+                PairTokenProbe(IMD).balanceOf(MANAGER),
+                PairTokenProbe(IMD).balanceOf(address(trader))
+            )
+        );
     }
 
     function _assertRunningLog(Vm.Log[] memory logs, address sender, uint256 amount) internal view {
         uint256 matched;
         for (uint256 i; i < logs.length; ++i) {
             if (
-                logs[i].emitter == address(token)
+                logs[i].emitter == address(token) && logs[i].topics.length > 0
                     && logs[i].topics[0] == keccak256("TransferRunningTotal(address,uint256)")
             ) {
                 assertEq(logs[i].topics.length, 2);
