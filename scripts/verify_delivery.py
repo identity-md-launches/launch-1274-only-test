@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check the exact manifest, artwork files and token ABI using only Python's standard library."""
 
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -39,6 +40,10 @@ def check_png(path):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--token-only", action="store_true", help="check the launch manifest and token artifact without artwork")
+    args = parser.parse_args()
+
     manifest = json.loads((ROOT / "launch.json").read_text())
     assert set(manifest) == {"kind", "token", "contracts", "pool", "economics", "notes"}
     assert manifest["kind"] == "custom_token"
@@ -57,10 +62,6 @@ def main():
     }
     assert isinstance(manifest["notes"], str) and manifest["notes"]
 
-    hashes = [check_png(ROOT / "logos" / f"logo-{n}.png") for n in range(1, 6)]
-    assert len(set(hashes)) == 5, "options must be distinct files"
-    assert check_png(ROOT / "artifacts/logo.png") == hashes[1], "selected logo must match option 2"
-
     artifact = json.loads((ROOT / "out/TESTToken.sol/TESTToken.json").read_text())
     names = {entry["name"] for entry in artifact["abi"] if entry["type"] == "function"}
     assert names == {
@@ -71,7 +72,13 @@ def main():
     assert len(constructors) == 1 and constructors[0]["inputs"] == []
     assert not artifact["bytecode"].get("linkReferences")
     assert not artifact["deployedBytecode"].get("linkReferences")
-    print("PASS: exact launch manifest; five distinct 1024x1024 opaque logos; selected icon; fixed token ABI; no linked libraries")
+    print("PASS: exact launch manifest; fixed token ABI; no linked libraries")
+
+    if not args.token_only:
+        hashes = [check_png(ROOT / "logos" / f"logo-{n}.png") for n in range(1, 6)]
+        assert len(set(hashes)) == 5, "options must be distinct files"
+        assert check_png(ROOT / "artifacts/logo.png") == hashes[1], "selected logo must match option 2"
+        print("PASS: five distinct 1024x1024 opaque logos; selected icon")
 
 
 if __name__ == "__main__":

@@ -13,14 +13,17 @@ Build and check from the repository root:
 ```sh
 forge build
 forge test
-python3 scripts/verify_delivery.py
+forge fmt --check
+python3 scripts/verify_delivery.py --token-only
 ```
 
 Solidity is pinned to 0.8.26, Cancun, optimizer enabled, 200 runs, metadata bytecode hash disabled. Every Solidity import is vendored as an ordinary file under `lib/`; no package download, submodule, FFI or filesystem permission is required. Dependency provenance and licenses are listed in [DEPENDENCIES.md](DEPENDENCIES.md). The Python delivery check uses only the standard library.
 
 The offline suite covers token behavior, error rollback, absence of administrative entry points, forbidden runtime opcodes, 3,000 fuzz cases, and 256 invariant sequences of 64 calls. Integration tests construct an actual Uniswap v4 PoolManager at the specified mainnet address, use a test-only IMD balance model, and run a factory/distributor/seed/buy/sell flow in both currency orders. They check exact token settlement and sender totals, the 10% allocation, 90% liquidity budget, and remainder conservation. All helper contracts live under `test/` and are not launch applications.
 
-The optional mainnet transfer/event smoke test skips when `MAINNET_RPC_URL` is absent. To run it, set that environment variable outside this repository and optionally set `MAINNET_FORK_BLOCK` to a block where both supplied mainnet contracts exist, then run `forge test --match-contract MainnetForkTest`. No RPC key is included. Live mainnet state was **not** tested in this delivery; the local integration does not establish the current IMD implementation or factory policy. The supplied protected suite belongs to the external verifier and is not represented as having run locally.
+The optional mainnet transfer/event smoke test skips when no Foundry fork is active. Run it with `forge test --match-contract MainnetForkTest --fork-url <mainnet-rpc-url> --fork-block-number <block-number>`, supplying an Ethereum mainnet RPC URL and a block where both supplied mainnet contracts exist. Tests never read or write environment variables, and no RPC key is included. Live mainnet state was **not** tested in this delivery; the local integration does not establish the current IMD implementation or factory policy. The supplied protected suite belongs to the external verifier and is not represented as having run locally.
+
+For a fast offline smoke check using the existing tests, run `forge test --match-contract TESTTokenTest --match-test 'test_(ConstructorMintsOnceAndRetainsNothing|RunningTotalsAccumulatePerSenderInMinorUnits|FailedTransferFromRollsBackAllowanceAndTotals)$'`. This covers deployment, full supply, exact transfers, cumulative events, and failure rollback. The token-only delivery checker validates the exact manifest and compiled ABI without requiring artwork; omit `--token-only` for the separate artwork checks.
 
 The five 1024×1024 image-generated options are documented in [logos/README.md](logos/README.md). [artifacts/logo.png](artifacts/logo.png) is the selected minimal test-tube mark. It was inspected as a 32-pixel circle on light and dark backgrounds; each option was inspected at 64 pixels. See [REVIEW.md](REVIEW.md) for the local adversarial review and its limits.
 
@@ -67,7 +70,7 @@ The browser script defaults to the system Chrome executable at `/opt/google/chro
 
 The browser suite fulfills requests from the actual `dist/` files under a virtual HTTPS `/preview/` subpath. It requires no live API, registry mirror, credentials or deployed token. It creates a random **test-only** address in memory and exercises prelaunch, live, invalid and stale-data states. Its virtual clock verifies the 30-second refresh immediately. It validates all nine PNG download controls, keyboard and pointer interactions, navigation, reduced motion, text enlargement, assets and accessibility. Screenshots and its machine-readable report are saved in `web/review/`; temporary downloads/failure traces stay under `test/scratch/`.
 
-Actual results: production export and strict JavaScript typecheck passed; **29 browser checks and four axe accessibility scans passed**, with zero reported WCAG A/AA violations. Ten widths from 320 to 1920px were checked for overflow. The supplied browser also inspected the HTTP-served export at mobile and desktop widths, including both pages. Foundry: **17 passed, 0 failed, 1 skipped**; the skipped test needs `MAINNET_RPC_URL`. These are local checks, not independent certification. Axe leaves some contrast cases for manual review; native screen readers, Safari/Firefox, physical devices, native zoom and social-network card rendering were not tested.
+Actual results: production export and strict JavaScript typecheck passed; **29 browser checks and four axe accessibility scans passed**, with zero reported WCAG A/AA violations. Ten widths from 320 to 1920px were checked for overflow. The supplied browser also inspected the HTTP-served export at mobile and desktop widths, including both pages. Foundry: **17 passed, 0 failed, 1 skipped**; the skipped test needs an explicitly selected mainnet fork. These are local checks, not independent certification. Axe leaves some contrast cases for manual review; native screen readers, Safari/Firefox, physical devices, native zoom and social-network card rendering were not tested.
 
 ### Publish and live data
 

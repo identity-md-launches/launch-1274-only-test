@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {TESTToken} from "../src/TESTToken.sol";
 
-/// @notice Optional mainnet transfer/event smoke test. Offline verification skips it cleanly.
+/// @notice Optional mainnet transfer/event smoke test. Select a fork with forge test --fork-url.
 contract MainnetForkTest is Test {
     address internal constant MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
     address internal constant IMD = 0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7;
@@ -12,14 +12,12 @@ contract MainnetForkTest is Test {
     event TransferRunningTotal(address indexed sender, uint256 cumulativeAmount);
 
     function test_MainnetForkTransfersAndRunningTotals() public {
-        string memory url = vm.envOr("MAINNET_RPC_URL", string(""));
-        if (bytes(url).length == 0) {
-            vm.skip(true);
+        // Fork selection belongs to the runner; default tests never read environment variables.
+        try vm.activeFork() returns (uint256) {}
+        catch {
+            vm.skip(true, "Select an Ethereum mainnet fork with --fork-url");
             return;
         }
-        uint256 blockNumber = vm.envOr("MAINNET_FORK_BLOCK", uint256(0));
-        if (blockNumber == 0) vm.createSelectFork(url);
-        else vm.createSelectFork(url, blockNumber);
         assertEq(block.chainid, 1, "fork must be Ethereum mainnet");
         assertGt(MANAGER.code.length, 0, "PoolManager must exist at fork block");
         assertGt(IMD.code.length, 0, "IMD must exist at fork block");
